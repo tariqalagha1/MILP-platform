@@ -1,0 +1,187 @@
+// MILP Healthcare Revenue Intelligence Platform
+// Prisma Schema for Multi-tenant SaaS
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Subscription plans for multi-tenant pricing
+enum Plan {
+  STARTER    // Single clinic - SAR 4,000/month
+  GROWTH     // Clinic chains - SAR 10,000-18,000/month
+  ENTERPRISE // Hospital groups - SAR 250k-700k/year
+}
+
+// Claim status for claims intelligence module
+enum ClaimStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PENDING_REVIEW
+  RECOVERED
+}
+
+// Appointment status for patient follow-up module
+enum ApptStatus {
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  RESCHEDULED
+}
+
+// Organization (tenant) - represents a healthcare provider group
+model Organization {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  plan         Plan      @default(STARTER)
+  clerkOrgId   String?   @unique // Clerk organization ID for auth
+  
+  branches     Branch[]
+  users        User[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  @@map("organizations")
+}
+
+// User belongs to an organization (multi-tenant)
+model User {
+  id             String       @id @default(cuid())
+  clerkUserId    String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  email          String
+  name           String?
+  role           String       @default("member") // admin, member, viewer
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  @@map("users")
+}
+
+// Branch - individual clinic location
+model Branch {
+  id             String          @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  
+  // Relations
+  appointments     Appointment[]
+  claims           Claim[]
+  roiCalculations  ROICalculation[]
+  
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  
+  @@index([organizationId])
+  @@map("branches")
+}
+
+// ROI Calculator - saves calculations per branch
+model ROICalculation {
+  id                  String   @id @default(cuid())
+  branchId            String
+  branch              Branch   @relation(fields: [branchId], references: [id])
+  
+  // Input metrics
+  monthlyAppointments Int      // Total monthly appointments
+  avgAppointmentValue Float    // SAR per appointment
+  noShowRate          Float    // Percentage 0-100
+  rejectedClaimsRate  Float    // Percentage 0-100
+  avgClaimValue       Float    // SAR per claim
+  repeatVisitRate     Float    // Percentage 0-100
+  
+  // Calculated outputs (stored for reporting)
+  recoverableRevenue90Days Float // Total recoverable in 90 days
+  annualizedSavings        Float // Projected annual savings
+  
+  createdAt           DateTime @default(now())
+  
+  @@index([branchId])
+  @@map("roi_calculations")
+}
+
+// Claim - for Claims Intelligence module
+model Claim {
+  id              String      @id @default(cuid())
+  branchId        String
+  branch          Branch      @relation(fields: [branchId], references: [id])
+  
+  claimNumber     String      // External claim reference
+  patientId       String      // Patient identifier (anonymized)
+  amount          Float       // Claim amount in SAR
+  status          ClaimStatus @default(SUBMITTED)
+  
+  // Rejection details
+  rejectionReason String?
+  rejectionRisk   Float?      // AI-predicted risk score 0-100
+  missingFields   String[]    // List of missing required fields
+  
+  // Workflow
+  submittedAt     DateTime    @default(now())
+  resolvedAt      DateTime?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([branchId, status])
+  @@index([branchId, submittedAt])
+  @@map("claims")
+}
+
+// Patient - for Patient Follow-up Intelligence module
+model Patient {
+  id           String   @id @default(cuid())
+  branchId     String
+  
+  // Anonymized patient data
+  externalId   String   // Reference to PMS/EMR
+  noShowCount  Int      @default(0)
+  lastVisitAt  DateTime?
+  nextDueAt    DateTime? // When they're due for follow-up
+  
+  // Risk scores
+  noShowRisk   Float?   // Predicted no-show risk 0-100
+  
+  appointments Appointment[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([branchId, externalId])
+  @@index([branchId, nextDueAt])
+  @@map("patients")
+}
+
+// Appointment - for Patient Follow-up Intelligence
+model Appointment {
+  id           String     @id @default(cuid())
+  patientId    String
+  patient      Patient    @relation(fields: [patientId], references: [id])
+  branchId     String
+  branch       Branch     @relation(fields: [branchId], references: [id])
+  
+  scheduledAt  DateTime
+  status       ApptStatus @default(SCHEDULED)
+  value        Float      // Appointment value in SAR
+  
+  // Reminder tracking
+  reminderSent     Boolean  @default(false)
+  reminderSentAt   DateTime?
+  
+  // No-show prediction
+  noShowRisk       Float?   // Predicted risk at booking time
+  
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  @@index([branchId, scheduledAt])
+  @@index([patientId])
+  @@map("appointments")
+}
