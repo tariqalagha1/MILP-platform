@@ -99,8 +99,67 @@ export default function ReportsPage() {
   };
 
   const handleExport = (format: 'pdf' | 'csv') => {
-    // Placeholder for export functionality
-    alert(`Export to ${format.toUpperCase()} coming soon!`);
+    if (!data) return;
+
+    if (format === 'csv') {
+      // Build CSV rows
+      const rows: string[][] = [];
+
+      // Summary section
+      rows.push(['MILP Revenue Report', `Period: Last ${data.period} days`, `Generated: ${new Date().toLocaleDateString()}`]);
+      rows.push([]);
+      rows.push(['--- SUMMARY ---']);
+      rows.push(['Metric', 'Value']);
+      rows.push(['Total Revenue (SAR)', data.summary.totalRevenue.toFixed(2)]);
+      rows.push(['Lost Revenue (SAR)', data.summary.lostRevenue.toFixed(2)]);
+      rows.push(['Claims Submitted (SAR)', data.summary.totalClaimsSubmitted.toFixed(2)]);
+      rows.push(['Claims Approved (SAR)', data.summary.totalClaimsApproved.toFixed(2)]);
+      rows.push(['Collection Rate (%)', data.summary.collectionRate.toFixed(1)]);
+      rows.push(['Patient Retention Rate (%)', data.summary.patientRetentionRate.toFixed(1)]);
+      rows.push([]);
+
+      // Revenue trends
+      rows.push(['--- REVENUE TRENDS ---']);
+      rows.push(['Month', 'Completed (SAR)', 'No-Show (SAR)', 'Cancelled (SAR)']);
+      data.trends.revenue.forEach(r => {
+        rows.push([r.month, r.completed.toFixed(2), r.noShow.toFixed(2), r.cancelled.toFixed(2)]);
+      });
+      rows.push([]);
+
+      // Claims trends
+      rows.push(['--- CLAIMS TRENDS ---']);
+      rows.push(['Month', 'Submitted (SAR)', 'Approved (SAR)', 'Rejected (SAR)']);
+      data.trends.claims.forEach(c => {
+        rows.push([c.month, c.submitted.toFixed(2), c.approved.toFixed(2), c.rejected.toFixed(2)]);
+      });
+      rows.push([]);
+
+      // Patient insights
+      rows.push(['--- PATIENT INSIGHTS ---']);
+      rows.push(['Category', 'Count']);
+      rows.push(['Total Patients', data.patients.total.toString()]);
+      rows.push(['Returning Patients', data.patients.returning.toString()]);
+      rows.push(['At-Risk Patients', data.patients.atRisk.toString()]);
+
+      // Convert to CSV string
+      const csvContent = rows
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      // Trigger download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `milp-report-${data.period}days-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      // PDF: open print dialog with data visible
+      window.print();
+    }
   };
 
   const getAppointmentPieData = () => {
@@ -149,9 +208,13 @@ export default function ReportsPage() {
             <Button variant="outline" size="icon" onClick={fetchReports}>
               <RefreshCw className="h-4 w-4" />
             </Button>
+            <Button variant="outline" onClick={() => handleExport('csv')}>
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
             <Button variant="outline" onClick={() => handleExport('pdf')}>
               <Download className="h-4 w-4 mr-2" />
-              Export
+              Print PDF
             </Button>
           </div>
         </div>

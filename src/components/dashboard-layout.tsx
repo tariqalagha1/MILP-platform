@@ -18,6 +18,7 @@ import {
   LogOut,
   User,
   Database,
+  Rocket,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
@@ -31,6 +32,12 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
+  {
+    title: 'Getting Started',
+    href: '/dashboard/getting-started',
+    icon: Rocket,
+    badge: 'New',
+  },
   {
     title: 'Overview',
     href: '/dashboard/overview',
