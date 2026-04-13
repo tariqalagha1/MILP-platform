@@ -4,13 +4,23 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
 
-export const POST = withAuth(async (
+export const POST = async (
   request: NextRequest,
-  user,
   { params }: { params: Promise<{ id: string }> }
 ) => {
+  const user = await getAuthUser();
+
+  // Check authentication
+  if (!user) {
+    return NextResponse.json({
+      success: false,
+      error: 'Unauthorized',
+      code: 'AUTH_REQUIRED',
+    }, { status: 401 });
+  }
+
   // Only admins can restore backups
   if (user.role !== 'admin') {
     return NextResponse.json({
@@ -53,4 +63,4 @@ export const POST = withAuth(async (
       code: 'RESTORE_ERROR',
     }, { status: 500 });
   }
-});
+};
