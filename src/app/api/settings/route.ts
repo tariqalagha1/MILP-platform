@@ -18,6 +18,27 @@ let settingsStore: Record<string, any> = {
   twilioToken: '',
   sendgridEnabled: false,
   sendgridKey: '',
+  // AI Configuration
+  aiEnabled: false,
+  aiBehaviorLevel: 'on-call',
+  aiLanguage: 'ar',
+  aiTone: 'professional',
+  aiPatientCount: '500',
+  aiClaimsPerMonth: '200',
+  aiInsurers: ['Tawuniya', 'Bupa Arabia', 'Medgulf'],
+  aiTasks: [],
+  aiAlerts: [],
+  aiPermissions: [],
+  aiCanGenerateReports: true,
+  aiCanSendAlerts: true,
+  aiCanSuggestActions: true,
+  aiCanModifyData: false,
+  aiCanMessagePatients: false,
+  aiCanContactInsurers: false,
+  aiCanAccessInsurerPortals: true,
+  aiCanAccessRegulatorySites: true,
+  aiCanAccessSocialMedia: false,
+  aiCanAccessGeneralInternet: false,
 };
 
 // GET /api/settings - Retrieve current settings
@@ -54,6 +75,14 @@ export async function PATCH(request: NextRequest) {
       'smsEnabled', 'emailEnabled', 'reminderHours', 'followUpDays',
       'twilioEnabled', 'twilioSid', 'twilioToken',
       'sendgridEnabled', 'sendgridKey',
+      // AI Configuration fields
+      'aiEnabled', 'aiBehaviorLevel', 'aiLanguage', 'aiTone',
+      'aiPatientCount', 'aiClaimsPerMonth', 'aiInsurers',
+      'aiTasks', 'aiAlerts', 'aiPermissions',
+      'aiCanGenerateReports', 'aiCanSendAlerts', 'aiCanSuggestActions',
+      'aiCanModifyData', 'aiCanMessagePatients', 'aiCanContactInsurers',
+      'aiCanAccessInsurerPortals', 'aiCanAccessRegulatorySites',
+      'aiCanAccessSocialMedia', 'aiCanAccessGeneralInternet',
     ];
 
     const updates: Record<string, any> = {};

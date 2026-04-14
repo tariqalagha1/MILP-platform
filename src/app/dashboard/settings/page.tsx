@@ -28,6 +28,15 @@ import {
   UserPlus,
   Trash2,
   Shield,
+  Bot,
+  CalendarCheck,
+  AlertTriangle,
+  Lock,
+  Plus,
+  X,
+  Clock,
+  Edit,
+  FileWarning,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -45,6 +54,60 @@ interface TeamMember {
   role: 'admin' | 'manager' | 'standard_user' | 'guest';
   status: 'active' | 'invited';
 }
+
+interface AITask {
+  id: string;
+  name: string;
+  frequency: 'daily' | 'weekly' | 'monthly';
+  time: string;
+  dayOfWeek?: number; // 0-6 for weekly
+  dayOfMonth?: number; // 1-31 for monthly
+  action: string;
+  deliveryChannels: string[];
+  enabled: boolean;
+}
+
+interface AIAlert {
+  id: string;
+  name: string;
+  category: 'claims' | 'appointments' | 'patients';
+  condition: string;
+  threshold: number;
+  thresholdUnit: string;
+  severity: 'high' | 'medium' | 'low';
+  deliveryTo: string;
+  enabled: boolean;
+}
+
+interface AIPermission {
+  category: string;
+  item: string;
+  allowed: boolean;
+}
+
+const SEVERITY_COLORS: Record<string, string> = {
+  high: 'bg-red-100 text-red-800',
+  medium: 'bg-yellow-100 text-yellow-800',
+  low: 'bg-green-100 text-green-800',
+};
+
+const INSURERS = ['Tawuniya', 'Bupa Arabia', 'Medgulf', 'Malath', 'Gulf Union', 'AXA', 'CIGNA', 'MetLife'];
+
+const AI_TASK_TEMPLATES: Partial<AITask>[] = [
+  { name: 'Morning Claims Review', frequency: 'daily', time: '08:00', action: 'Review claims submitted yesterday, flag high-risk claims before insurers process', deliveryChannels: ['telegram'] },
+  { name: 'End-of-Day Summary', frequency: 'daily', time: '17:00', action: 'Summarize today\'s appointments, claims, and revenue recovered', deliveryChannels: ['email'] },
+  { name: 'Monday No-Show Analysis', frequency: 'weekly', time: '09:00', dayOfWeek: 1, action: 'Analyze last week\'s no-show patterns, identify high-risk patients for this week', deliveryChannels: ['telegram'] },
+  { name: 'Weekly Revenue Report', frequency: 'weekly', time: '14:00', dayOfWeek: 5, action: 'Calculate week\'s revenue impact, compare to previous week, highlight improvements', deliveryChannels: ['email'] },
+  { name: 'Monthly Revenue Leakage Report', frequency: 'monthly', time: '09:00', dayOfMonth: 1, action: 'Full revenue analysis, top 5 improvement opportunities, branch comparison', deliveryChannels: ['email'] },
+];
+
+const AI_ALERT_TEMPLATES: Partial<AIAlert>[] = [
+  { name: 'High-Value Claim Rejected', category: 'claims', condition: 'claim_amount_above', threshold: 5000, thresholdUnit: 'SAR', severity: 'high' },
+  { name: 'Rejection Rate Spike', category: 'claims', condition: 'daily_rejection_rate_above', threshold: 15, thresholdUnit: '%', severity: 'medium' },
+  { name: 'No-Show Rate Warning', category: 'appointments', condition: 'branch_noshow_rate_above', threshold: 10, thresholdUnit: '%', severity: 'medium' },
+  { name: 'High-Risk Patient Scheduled', category: 'appointments', condition: 'patient_noshow_risk_above', threshold: 80, thresholdUnit: '%', severity: 'low' },
+  { name: 'Follow-Up Overdue Spike', category: 'patients', condition: 'overdue_patients_above', threshold: 20, thresholdUnit: 'patients', severity: 'medium' },
+];
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-red-100 text-red-800',
@@ -113,6 +176,61 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null);
 
+  // AI Assistant settings
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiBehaviorLevel, setAiBehaviorLevel] = useState<'on-call' | 'observer' | 'supervisor'>('on-call');
+  const [aiLanguage, setAiLanguage] = useState<'ar' | 'en' | 'both'>('ar');
+  const [aiTone, setAiTone] = useState<'brief' | 'professional' | 'detailed'>('professional');
+  const [aiPatientCount, setAiPatientCount] = useState('500');
+  const [aiClaimsPerMonth, setAiClaimsPerMonth] = useState('200');
+  const [aiInsurers, setAiInsurers] = useState<string[]>(['Tawuniya', 'Bupa Arabia', 'Medgulf']);
+
+  // AI Tasks
+  const [aiTasks, setAiTasks] = useState<AITask[]>([]);
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [newTask, setNewTask] = useState<Partial<AITask>>({ frequency: 'daily', time: '09:00', deliveryChannels: ['telegram'], enabled: true });
+
+  // AI Alerts
+  const [aiAlerts, setAiAlerts] = useState<AIAlert[]>([]);
+  const [showAddAlertModal, setShowAddAlertModal] = useState(false);
+  const [newAlert, setNewAlert] = useState<Partial<AIAlert>>({ severity: 'medium', enabled: true });
+
+  // AI Permissions
+  const [aiPermissions, setAiPermissions] = useState<AIPermission[]>([
+    { category: 'claims', item: 'Claim numbers and amounts', allowed: true },
+    { category: 'claims', item: 'Rejection reasons', allowed: true },
+    { category: 'claims', item: 'Insurer names', allowed: true },
+    { category: 'claims', item: 'Submission dates', allowed: true },
+    { category: 'claims', item: 'Risk scores', allowed: true },
+    { category: 'claims', item: 'Internal notes', allowed: false },
+    { category: 'patients', item: 'Patient ID numbers (anonymized)', allowed: true },
+    { category: 'patients', item: 'No-show history', allowed: true },
+    { category: 'patients', item: 'Appointment history', allowed: true },
+    { category: 'patients', item: 'Follow-up status', allowed: true },
+    { category: 'patients', item: 'Patient names', allowed: false },
+    { category: 'patients', item: 'Phone numbers', allowed: false },
+    { category: 'patients', item: 'Email addresses', allowed: false },
+    { category: 'financial', item: 'Revenue totals and trends', allowed: true },
+    { category: 'financial', item: 'Recovery amounts', allowed: true },
+    { category: 'financial', item: 'Branch comparison metrics', allowed: true },
+    { category: 'financial', item: 'Individual staff performance', allowed: false },
+  ]);
+
+  // AI Actions
+  const [aiCanGenerateReports, setAiCanGenerateReports] = useState(true);
+  const [aiCanSendAlerts, setAiCanSendAlerts] = useState(true);
+  const [aiCanSuggestActions, setAiCanSuggestActions] = useState(true);
+  const [aiCanModifyData, setAiCanModifyData] = useState(false);
+  const [aiCanMessagePatients, setAiCanMessagePatients] = useState(false);
+  const [aiCanContactInsurers, setAiCanContactInsurers] = useState(false);
+
+  // AI Network Access
+  const [aiCanAccessInsurerPortals, setAiCanAccessInsurerPortals] = useState(true);
+  const [aiCanAccessRegulatorySites, setAiCanAccessRegulatorySites] = useState(true);
+  const [aiCanAccessSocialMedia, setAiCanAccessSocialMedia] = useState(false);
+  const [aiCanAccessGeneralInternet, setAiCanAccessGeneralInternet] = useState(false);
+
+
   // Load settings from API on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -132,6 +250,27 @@ export default function SettingsPage() {
           setFollowUpDays(settings.followUpDays || '7');
           setTwilioEnabled(settings.twilioEnabled ?? false);
           setSendgridEnabled(settings.sendgridEnabled ?? false);
+          // Load AI settings
+          setAiEnabled(settings.aiEnabled ?? false);
+          setAiBehaviorLevel(settings.aiBehaviorLevel || 'on-call');
+          setAiLanguage(settings.aiLanguage || 'ar');
+          setAiTone(settings.aiTone || 'professional');
+          setAiPatientCount(settings.aiPatientCount || '500');
+          setAiClaimsPerMonth(settings.aiClaimsPerMonth || '200');
+          setAiInsurers(settings.aiInsurers || ['Tawuniya', 'Bupa Arabia', 'Medgulf']);
+          setAiTasks(settings.aiTasks || []);
+          setAiAlerts(settings.aiAlerts || []);
+          setAiPermissions(settings.aiPermissions || []);
+          setAiCanGenerateReports(settings.aiCanGenerateReports ?? true);
+          setAiCanSendAlerts(settings.aiCanSendAlerts ?? true);
+          setAiCanSuggestActions(settings.aiCanSuggestActions ?? true);
+          setAiCanModifyData(settings.aiCanModifyData ?? false);
+          setAiCanMessagePatients(settings.aiCanMessagePatients ?? false);
+          setAiCanContactInsurers(settings.aiCanContactInsurers ?? false);
+          setAiCanAccessInsurerPortals(settings.aiCanAccessInsurerPortals ?? true);
+          setAiCanAccessRegulatorySites(settings.aiCanAccessRegulatorySites ?? true);
+          setAiCanAccessSocialMedia(settings.aiCanAccessSocialMedia ?? false);
+          setAiCanAccessGeneralInternet(settings.aiCanAccessGeneralInternet ?? false);
         }
       } catch {
         // silently use defaults
@@ -149,6 +288,14 @@ export default function SettingsPage() {
         orgName, orgEmail, orgPhone, country, currency, timezone,
         smsEnabled, emailEnabled, reminderHours, followUpDays,
         twilioEnabled, sendgridEnabled,
+        // AI settings
+        aiEnabled, aiBehaviorLevel, aiLanguage, aiTone,
+        aiPatientCount, aiClaimsPerMonth, aiInsurers,
+        aiTasks, aiAlerts, aiPermissions,
+        aiCanGenerateReports, aiCanSendAlerts, aiCanSuggestActions,
+        aiCanModifyData, aiCanMessagePatients, aiCanContactInsurers,
+        aiCanAccessInsurerPortals, aiCanAccessRegulatorySites,
+        aiCanAccessSocialMedia, aiCanAccessGeneralInternet,
       };
       if (twilioSid) payload.twilioSid = twilioSid;
       if (twilioToken && twilioToken !== '••••••••') payload.twilioToken = twilioToken;
@@ -343,7 +490,7 @@ export default function SettingsPage() {
 
         {/* Settings Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full">
+          <TabsList className="grid grid-cols-3 sm:grid-cols-9 w-full">
             <TabsTrigger value="organization">
               <Building2 className="h-4 w-4 mr-1.5" />
               Organization
@@ -363,6 +510,22 @@ export default function SettingsPage() {
             <TabsTrigger value="integrations">
               <Link2 className="h-4 w-4 mr-1.5" />
               Integrations
+            </TabsTrigger>
+            <TabsTrigger value="ai-assistant">
+              <Bot className="h-4 w-4 mr-1.5" />
+              AI
+            </TabsTrigger>
+            <TabsTrigger value="ai-tasks">
+              <CalendarCheck className="h-4 w-4 mr-1.5" />
+              Tasks
+            </TabsTrigger>
+            <TabsTrigger value="ai-alerts">
+              <AlertTriangle className="h-4 w-4 mr-1.5" />
+              Alerts
+            </TabsTrigger>
+            <TabsTrigger value="ai-permissions">
+              <Lock className="h-4 w-4 mr-1.5" />
+              Permissions
             </TabsTrigger>
           </TabsList>
 
@@ -786,6 +949,553 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── AI Assistant Tab ── */}
+          <TabsContent value="ai-assistant" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Bot className="h-4 w-4" />
+                  AI Assistant Status
+                </CardTitle>
+                <CardDescription>Enable or disable the AI assistant for your organization</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${aiEnabled ? 'bg-green-100' : 'bg-gray-100'}`}>
+                      <Bot className={`h-5 w-5 ${aiEnabled ? 'text-green-600' : 'text-gray-400'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium">{aiEnabled ? 'AI Assistant Active' : 'AI Assistant Disabled'}</p>
+                      <p className="text-sm text-muted-foreground">{aiEnabled ? 'AI can help analyze claims and predict no-shows' : 'Enable to let AI assist your team'}</p>
+                    </div>
+                  </div>
+                  <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {aiEnabled && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Clinic Profile</CardTitle>
+                    <CardDescription>Help AI understand your context</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Organization Name</Label>
+                        <Input value={orgName} disabled placeholder="Set in Organization tab" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Primary Location</Label>
+                        <Input value={country === 'SA' ? 'Saudi Arabia' : country} disabled />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Active Patients</Label>
+                        <Input value={aiPatientCount} onChange={e => setAiPatientCount(e.target.value)} placeholder="~500" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Monthly Claims</Label>
+                        <Input value={aiClaimsPerMonth} onChange={e => setAiClaimsPerMonth(e.target.value)} placeholder="~200" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Primary Insurers</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {INSURERS.map(insurer => (
+                          <button
+                            key={insurer}
+                            onClick={() => {
+                              if (aiInsurers.includes(insurer)) {
+                                setAiInsurers(aiInsurers.filter(i => i !== insurer));
+                              } else {
+                                setAiInsurers([...aiInsurers, insurer]);
+                              }
+                            }}
+                            className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                              aiInsurers.includes(insurer)
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                            }`}
+                          >
+                            {insurer}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Communication Style</CardTitle>
+                    <CardDescription>How AI communicates with you and your team</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Language</Label>
+                        <select
+                          value={aiLanguage}
+                          onChange={e => setAiLanguage(e.target.value as typeof aiLanguage)}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="ar">Arabic</option>
+                          <option value="en">English</option>
+                          <option value="both">Both</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Tone</Label>
+                        <select
+                          value={aiTone}
+                          onChange={e => setAiTone(e.target.value as typeof aiTone)}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="brief">Brief (bullet points)</option>
+                          <option value="professional">Professional (full sentences)</option>
+                          <option value="detailed">Detailed (comprehensive reports)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">AI Behavior Level</CardTitle>
+                    <CardDescription>How proactive should AI be?</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                      {[
+                        { value: 'on-call', label: 'On-Call Assistant', desc: 'AI waits for your questions. No proactive actions.' },
+                        { value: 'observer', label: 'Active Observer', desc: 'AI watches key metrics and alerts you to problems.' },
+                        { value: 'supervisor', label: 'Process Supervisor', desc: 'AI runs daily workflows, creates reports, suggests actions automatically.' },
+                      ].map(option => (
+                        <label
+                          key={option.value}
+                          className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                            aiBehaviorLevel === option.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/30'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="aiBehavior"
+                            value={option.value}
+                            checked={aiBehaviorLevel === option.value}
+                            onChange={() => setAiBehaviorLevel(option.value as typeof aiBehaviorLevel)}
+                            className="mt-1"
+                          />
+                          <div>
+                            <p className="font-medium">{option.label}</p>
+                            <p className="text-sm text-muted-foreground">{option.desc}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          {/* ── AI Tasks Tab ── */}
+          <TabsContent value="ai-tasks" className="space-y-4">
+            {!aiEnabled ? (
+              <Card className="bg-muted/30">
+                <CardContent className="pt-6 text-center">
+                  <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="font-medium">Enable AI Assistant first</p>
+                  <p className="text-sm text-muted-foreground">Go to the AI tab to enable the assistant</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Daily Tasks */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Daily Tasks
+                      </CardTitle>
+                      <CardDescription>Run every day at scheduled times</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => { setNewTask({ frequency: 'daily', time: '09:00', deliveryChannels: ['telegram'], enabled: true }); setShowAddTaskModal(true); }}>
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {aiTasks.filter(t => t.frequency === 'daily').length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No daily tasks configured</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {aiTasks.filter(t => t.frequency === 'daily').map(task => (
+                          <div key={task.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Switch checked={task.enabled} onCheckedChange={v => setAiTasks(aiTasks.map(t => t.id === task.id ? { ...t, enabled: v } : t))} />
+                              <div>
+                                <p className="font-medium text-sm">{task.name}</p>
+                                <p className="text-xs text-muted-foreground">Runs at {task.time}</p>
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setAiTasks(aiTasks.filter(t => t.id !== task.id))}>
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Weekly Tasks */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <CalendarCheck className="h-4 w-4" />
+                        Weekly Tasks
+                      </CardTitle>
+                      <CardDescription>Run on specific days each week</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => { setNewTask({ frequency: 'weekly', time: '09:00', dayOfWeek: 1, deliveryChannels: ['telegram'], enabled: true }); setShowAddTaskModal(true); }}>
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {aiTasks.filter(t => t.frequency === 'weekly').length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No weekly tasks configured</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {aiTasks.filter(t => t.frequency === 'weekly').map(task => (
+                          <div key={task.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Switch checked={task.enabled} onCheckedChange={v => setAiTasks(aiTasks.map(t => t.id === task.id ? { ...t, enabled: v } : t))} />
+                              <div>
+                                <p className="font-medium text-sm">{task.name}</p>
+                                <p className="text-xs text-muted-foreground">Every {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][task.dayOfWeek || 0]} at {task.time}</p>
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setAiTasks(aiTasks.filter(t => t.id !== task.id))}>
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Monthly Tasks */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Monthly Tasks</CardTitle>
+                      <CardDescription>Run on specific days each month</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => { setNewTask({ frequency: 'monthly', time: '09:00', dayOfMonth: 1, deliveryChannels: ['email'], enabled: true }); setShowAddTaskModal(true); }}>
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {aiTasks.filter(t => t.frequency === 'monthly').length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No monthly tasks configured</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {aiTasks.filter(t => t.frequency === 'monthly').map(task => (
+                          <div key={task.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Switch checked={task.enabled} onCheckedChange={v => setAiTasks(aiTasks.map(t => t.id === task.id ? { ...t, enabled: v } : t))} />
+                              <div>
+                                <p className="font-medium text-sm">{task.name}</p>
+                                <p className="text-xs text-muted-foreground">Day {task.dayOfMonth} of each month at {task.time}</p>
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setAiTasks(aiTasks.filter(t => t.id !== task.id))}>
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Task Templates */}
+                <Card className="bg-muted/30">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Quick Add from Templates</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {AI_TASK_TEMPLATES.map((template, i) => (
+                        <Button
+                          key={i}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAiTasks([...aiTasks, { ...template, id: Date.now().toString(), enabled: true } as AITask])}
+                          disabled={aiTasks.some(t => t.name === template.name)}
+                        >
+                          {template.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          {/* ── AI Alerts Tab ── */}
+          <TabsContent value="ai-alerts" className="space-y-4">
+            {!aiEnabled ? (
+              <Card className="bg-muted/30">
+                <CardContent className="pt-6 text-center">
+                  <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="font-medium">Enable AI Assistant first</p>
+                  <p className="text-sm text-muted-foreground">Go to the AI tab to enable the assistant</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Claims Alerts */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <FileWarning className="h-4 w-4" />
+                        Claims Alerts
+                      </CardTitle>
+                      <CardDescription>Monitor claim rejections and patterns</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => { setNewAlert({ category: 'claims', severity: 'medium', enabled: true }); setShowAddAlertModal(true); }}>
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {aiAlerts.filter(a => a.category === 'claims').length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No claims alerts configured</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {aiAlerts.filter(a => a.category === 'claims').map(alert => (
+                          <div key={alert.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Switch checked={alert.enabled} onCheckedChange={v => setAiAlerts(aiAlerts.map(a => a.id === alert.id ? { ...a, enabled: v } : a))} />
+                              <div>
+                                <p className="font-medium text-sm">{alert.name}</p>
+                                <p className="text-xs text-muted-foreground">When {alert.condition.replace(/_/g, ' ')} {alert.threshold}{alert.thresholdUnit}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge className={SEVERITY_COLORS[alert.severity]}>{alert.severity}</Badge>
+                              <Button variant="ghost" size="sm" onClick={() => setAiAlerts(aiAlerts.filter(a => a.id !== alert.id))}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Appointment Alerts */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Appointment Alerts</CardTitle>
+                      <CardDescription>Monitor no-shows and scheduling issues</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => { setNewAlert({ category: 'appointments', severity: 'medium', enabled: true }); setShowAddAlertModal(true); }}>
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {aiAlerts.filter(a => a.category === 'appointments').length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No appointment alerts configured</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {aiAlerts.filter(a => a.category === 'appointments').map(alert => (
+                          <div key={alert.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Switch checked={alert.enabled} onCheckedChange={v => setAiAlerts(aiAlerts.map(a => a.id === alert.id ? { ...a, enabled: v } : a))} />
+                              <div>
+                                <p className="font-medium text-sm">{alert.name}</p>
+                                <p className="text-xs text-muted-foreground">When {alert.condition.replace(/_/g, ' ')} {alert.threshold}{alert.thresholdUnit}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge className={SEVERITY_COLORS[alert.severity]}>{alert.severity}</Badge>
+                              <Button variant="ghost" size="sm" onClick={() => setAiAlerts(aiAlerts.filter(a => a.id !== alert.id))}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Patient Alerts */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Patient Alerts</CardTitle>
+                      <CardDescription>Monitor follow-up and patient engagement</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => { setNewAlert({ category: 'patients', severity: 'medium', enabled: true }); setShowAddAlertModal(true); }}>
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {aiAlerts.filter(a => a.category === 'patients').length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No patient alerts configured</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {aiAlerts.filter(a => a.category === 'patients').map(alert => (
+                          <div key={alert.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Switch checked={alert.enabled} onCheckedChange={v => setAiAlerts(aiAlerts.map(a => a.id === alert.id ? { ...a, enabled: v } : a))} />
+                              <div>
+                                <p className="font-medium text-sm">{alert.name}</p>
+                                <p className="text-xs text-muted-foreground">When {alert.condition.replace(/_/g, ' ')} {alert.threshold}{alert.thresholdUnit}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge className={SEVERITY_COLORS[alert.severity]}>{alert.severity}</Badge>
+                              <Button variant="ghost" size="sm" onClick={() => setAiAlerts(aiAlerts.filter(a => a.id !== alert.id))}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Alert Templates */}
+                <Card className="bg-muted/30">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Quick Add from Templates</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {AI_ALERT_TEMPLATES.map((template, i) => (
+                        <Button
+                          key={i}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAiAlerts([...aiAlerts, { ...template, id: Date.now().toString(), enabled: true } as AIAlert])}
+                          disabled={aiAlerts.some(a => a.name === template.name)}
+                        >
+                          {template.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          {/* ── AI Permissions Tab ── */}
+          <TabsContent value="ai-permissions" className="space-y-4">
+            {!aiEnabled ? (
+              <Card className="bg-muted/30">
+                <CardContent className="pt-6 text-center">
+                  <Lock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="font-medium">Enable AI Assistant first</p>
+                  <p className="text-sm text-muted-foreground">Go to the AI tab to enable the assistant</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Data AI Can View */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Data AI Can View</CardTitle>
+                    <CardDescription>Control what information the AI assistant can access</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {['claims', 'patients', 'financial'].map(category => (
+                      <div key={category}>
+                        <h4 className="font-medium text-sm capitalize mb-2">{category} Data</h4>
+                        <div className="space-y-2">
+                          {aiPermissions.filter(p => p.category === category).map((permission, i) => (
+                            <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                              <span className="text-sm">{permission.item}</span>
+                              <Switch
+                                checked={permission.allowed}
+                                onCheckedChange={v => setAiPermissions(aiPermissions.map(p =>
+                                  p.category === permission.category && p.item === permission.item ? { ...p, allowed: v } : p
+                                ))}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {/* Actions AI Can Take */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Actions AI Can Take</CardTitle>
+                    <CardDescription>Control what operations the AI can perform</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {[
+                      { label: 'Generate reports and summaries', value: aiCanGenerateReports, setter: setAiCanGenerateReports },
+                      { label: 'Send alerts and notifications', value: aiCanSendAlerts, setter: setAiCanSendAlerts },
+                      { label: 'Suggest actions (requires human approval)', value: aiCanSuggestActions, setter: setAiCanSuggestActions },
+                      { label: 'Modify any data directly', value: aiCanModifyData, setter: setAiCanModifyData, dangerous: true },
+                      { label: 'Send messages to patients', value: aiCanMessagePatients, setter: setAiCanMessagePatients, dangerous: true },
+                      { label: 'Contact insurers', value: aiCanContactInsurers, setter: setAiCanContactInsurers, dangerous: true },
+                    ].map((action, i) => (
+                      <div key={i} className="flex items-center justify-between py-2">
+                        <span className={`text-sm ${action.dangerous && action.value ? 'text-red-600' : ''}`}>{action.label}</span>
+                        <Switch checked={action.value} onCheckedChange={action.setter} />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {/* Network Access */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Network Access</CardTitle>
+                    <CardDescription>What external sites can AI connect to</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {[
+                      { label: 'Insurance company portals', value: aiCanAccessInsurerPortals, setter: setAiCanAccessInsurerPortals },
+                      { label: 'Regulatory websites', value: aiCanAccessRegulatorySites, setter: setAiCanAccessRegulatorySites },
+                      { label: 'Social media platforms', value: aiCanAccessSocialMedia, setter: setAiCanAccessSocialMedia, dangerous: true },
+                      { label: 'General internet access', value: aiCanAccessGeneralInternet, setter: setAiCanAccessGeneralInternet, dangerous: true },
+                    ].map((access, i) => (
+                      <div key={i} className="flex items-center justify-between py-2">
+                        <span className={`text-sm ${access.dangerous && access.value ? 'text-red-600' : ''}`}>{access.label}</span>
+                        <Switch checked={access.value} onCheckedChange={access.setter} />
+                      </div>
+                    ))}
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mt-4">
+                      <p className="text-sm text-yellow-800">
+                        ⚠️ Any new site AI tries to access will require your approval before connection is allowed.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </TabsContent>
         </Tabs>
 
