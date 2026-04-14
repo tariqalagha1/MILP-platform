@@ -39,6 +39,12 @@ let settingsStore: Record<string, any> = {
   aiCanAccessRegulatorySites: true,
   aiCanAccessSocialMedia: false,
   aiCanAccessGeneralInternet: false,
+  // AI Provider Configuration
+  aiProvider: 'ollama',
+  aiApiKey: '',
+  aiModel: 'llama3.2:3b',
+  aiCustomEndpoint: '',
+  aiProviderStatus: 'disconnected',
 };
 
 // GET /api/settings - Retrieve current settings
@@ -49,6 +55,7 @@ export async function GET() {
       ...settingsStore,
       twilioToken: settingsStore.twilioToken ? '••••••••' : '',
       sendgridKey: settingsStore.sendgridKey ? '••••••••' : '',
+      aiApiKey: settingsStore.aiApiKey ? '••••••••' : '',
     };
 
     return NextResponse.json({
@@ -83,6 +90,8 @@ export async function PATCH(request: NextRequest) {
       'aiCanModifyData', 'aiCanMessagePatients', 'aiCanContactInsurers',
       'aiCanAccessInsurerPortals', 'aiCanAccessRegulatorySites',
       'aiCanAccessSocialMedia', 'aiCanAccessGeneralInternet',
+      // AI Provider fields
+      'aiProvider', 'aiApiKey', 'aiModel', 'aiCustomEndpoint', 'aiProviderStatus',
     ];
 
     const updates: Record<string, any> = {};
@@ -107,6 +116,7 @@ export async function PATCH(request: NextRequest) {
       ...settingsStore,
       twilioToken: settingsStore.twilioToken ? '••••••••' : '',
       sendgridKey: settingsStore.sendgridKey ? '••••••••' : '',
+      aiApiKey: settingsStore.aiApiKey ? '••••••••' : '',
     };
 
     return NextResponse.json({

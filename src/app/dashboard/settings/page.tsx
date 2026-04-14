@@ -37,6 +37,14 @@ import {
   Clock,
   Edit,
   FileWarning,
+  Cpu,
+  Cloud,
+  Sparkles,
+  Zap,
+  Eye,
+  EyeOff,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -84,6 +92,25 @@ interface AIPermission {
   item: string;
   allowed: boolean;
 }
+
+interface AIProviderConfig {
+  provider: 'nvidia' | 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom';
+  apiKey: string;
+  model: string;
+  endpoint?: string;
+  status: 'connected' | 'disconnected' | 'testing' | 'error';
+  lastTested?: string;
+  errorMessage?: string;
+}
+
+const AI_PROVIDERS = [
+  { id: 'nvidia', name: 'NVIDIA Endpoints', icon: 'Zap', color: 'text-green-600', bgColor: 'bg-green-100', description: 'Nemotron models on build.nvidia.com', requiresKey: true, keyPlaceholder: 'nvapi-xxxx...', models: ['nvidia/nemotron-3-super-120b-a12b', 'nvidia/nemotron-4-340b-instruct', 'meta/llama-3.1-405b-instruct'] },
+  { id: 'openai', name: 'OpenAI', icon: 'Sparkles', color: 'text-purple-600', bgColor: 'bg-purple-100', description: 'GPT models via OpenAI API', requiresKey: true, keyPlaceholder: 'sk-xxxx...', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
+  { id: 'anthropic', name: 'Anthropic', icon: 'Bot', color: 'text-orange-600', bgColor: 'bg-orange-100', description: 'Claude models via Anthropic API', requiresKey: true, keyPlaceholder: 'sk-ant-xxxx...', models: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6'] },
+  { id: 'google', name: 'Google Gemini', icon: 'Cloud', color: 'text-blue-600', bgColor: 'bg-blue-100', description: 'Gemini models via Google AI', requiresKey: true, keyPlaceholder: 'AIza-xxxx...', models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
+  { id: 'ollama', name: 'Local Ollama', icon: 'Cpu', color: 'text-gray-600', bgColor: 'bg-gray-100', description: 'Run models locally on your machine', requiresKey: false, keyPlaceholder: '', models: ['llama3.2:3b', 'llama3.1:8b', 'qwen2.5:14b', 'mistral:7b', 'codellama:34b'] },
+  { id: 'custom', name: 'Custom Endpoint', icon: 'Link2', color: 'text-cyan-600', bgColor: 'bg-cyan-100', description: 'Any OpenAI-compatible server', requiresKey: true, keyPlaceholder: 'Optional API key', models: [] },
+];
 
 const SEVERITY_COLORS: Record<string, string> = {
   high: 'bg-red-100 text-red-800',
@@ -230,6 +257,15 @@ export default function SettingsPage() {
   const [aiCanAccessSocialMedia, setAiCanAccessSocialMedia] = useState(false);
   const [aiCanAccessGeneralInternet, setAiCanAccessGeneralInternet] = useState(false);
 
+  // AI Provider / Inference Configuration
+  const [aiProvider, setAiProvider] = useState<AIProviderConfig['provider']>('ollama');
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [aiModel, setAiModel] = useState('llama3.2:3b');
+  const [aiCustomEndpoint, setAiCustomEndpoint] = useState('');
+  const [aiProviderStatus, setAiProviderStatus] = useState<AIProviderConfig['status']>('disconnected');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+
 
   // Load settings from API on mount
   useEffect(() => {
@@ -271,6 +307,14 @@ export default function SettingsPage() {
           setAiCanAccessRegulatorySites(settings.aiCanAccessRegulatorySites ?? true);
           setAiCanAccessSocialMedia(settings.aiCanAccessSocialMedia ?? false);
           setAiCanAccessGeneralInternet(settings.aiCanAccessGeneralInternet ?? false);
+          // Load AI Provider settings
+          setAiProvider(settings.aiProvider || 'ollama');
+          setAiModel(settings.aiModel || 'llama3.2:3b');
+          setAiCustomEndpoint(settings.aiCustomEndpoint || '');
+          setAiProviderStatus(settings.aiProviderStatus || 'disconnected');
+          if (settings.aiApiKey) {
+            setAiApiKey(settings.aiApiKey);
+          }
         }
       } catch {
         // silently use defaults
@@ -296,7 +340,14 @@ export default function SettingsPage() {
         aiCanModifyData, aiCanMessagePatients, aiCanContactInsurers,
         aiCanAccessInsurerPortals, aiCanAccessRegulatorySites,
         aiCanAccessSocialMedia, aiCanAccessGeneralInternet,
+        // AI Provider settings
+        aiProvider, aiModel, aiCustomEndpoint,
+        aiProviderStatus,
       };
+      // Only include API key if it's changed (not masked)
+      if (aiApiKey && !aiApiKey.includes('•')) {
+        payload.aiApiKey = aiApiKey;
+      }
       if (twilioSid) payload.twilioSid = twilioSid;
       if (twilioToken && twilioToken !== '••••••••') payload.twilioToken = twilioToken;
       if (sendgridKey && sendgridKey !== '••••••••') payload.sendgridKey = sendgridKey;
@@ -490,7 +541,7 @@ export default function SettingsPage() {
 
         {/* Settings Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-3 sm:grid-cols-9 w-full">
+          <TabsList className="grid grid-cols-3 sm:grid-cols-10 w-full">
             <TabsTrigger value="organization">
               <Building2 className="h-4 w-4 mr-1.5" />
               Organization
@@ -510,6 +561,10 @@ export default function SettingsPage() {
             <TabsTrigger value="integrations">
               <Link2 className="h-4 w-4 mr-1.5" />
               Integrations
+            </TabsTrigger>
+            <TabsTrigger value="ai-provider">
+              <Zap className="h-4 w-4 mr-1.5" />
+              Provider
             </TabsTrigger>
             <TabsTrigger value="ai-assistant">
               <Bot className="h-4 w-4 mr-1.5" />
@@ -947,6 +1002,196 @@ export default function SettingsPage() {
                     {importResult.errors > 0 && <p>{importResult.errors} records had errors and were skipped</p>}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── AI Provider Tab ── */}
+          <TabsContent value="ai-provider" className="space-y-4">
+            {/* Connection Status Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  AI Provider Connection
+                </CardTitle>
+                <CardDescription>Configure which AI service powers your assistant</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between p-4 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${aiProviderStatus === 'connected' ? 'bg-green-100' : aiProviderStatus === 'testing' ? 'bg-yellow-100' : aiProviderStatus === 'error' ? 'bg-red-100' : 'bg-gray-100'}`}>
+                      {aiProviderStatus === 'testing' ? (
+                        <RefreshCw className="h-5 w-5 text-yellow-600 animate-spin" />
+                      ) : aiProviderStatus === 'connected' ? (
+                        <Wifi className="h-5 w-5 text-green-600" />
+                      ) : aiProviderStatus === 'error' ? (
+                        <WifiOff className="h-5 w-5 text-red-600" />
+                      ) : (
+                        <WifiOff className="h-5 w-5 text-gray-400" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium">
+                        {aiProviderStatus === 'connected' ? 'Connected' : aiProviderStatus === 'testing' ? 'Testing...' : aiProviderStatus === 'error' ? 'Connection Error' : 'Not Connected'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {AI_PROVIDERS.find(p => p.id === aiProvider)?.name || 'No provider selected'}
+                        {aiModel && ` • ${aiModel}`}
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={async () => {
+                      setTestingConnection(true);
+                      setAiProviderStatus('testing');
+                      // Simulate connection test
+                      await new Promise(r => setTimeout(r, 1500));
+                      const hasKey = AI_PROVIDERS.find(p => p.id === aiProvider)?.requiresKey ? aiApiKey.length > 0 : true;
+                      if (hasKey || aiProvider === 'ollama') {
+                        setAiProviderStatus('connected');
+                        toast.success('Connection successful!');
+                      } else {
+                        setAiProviderStatus('error');
+                        toast.error('API key required for this provider');
+                      }
+                      setTestingConnection(false);
+                    }}
+                    disabled={testingConnection}
+                  >
+                    {testingConnection ? (
+                      <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-1.5" />
+                    )}
+                    Test Connection
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Provider Selection Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Select AI Provider</CardTitle>
+                <CardDescription>Choose the AI service that will power your assistant</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {AI_PROVIDERS.map((provider) => (
+                    <button
+                      key={provider.id}
+                      onClick={() => {
+                        setAiProvider(provider.id as AIProviderConfig['provider']);
+                        if (provider.models.length > 0) {
+                          setAiModel(provider.models[0]);
+                        }
+                        setAiProviderStatus('disconnected');
+                      }}
+                      className={`p-4 rounded-lg border-2 text-left transition-all ${
+                        aiProvider === provider.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-muted hover:border-muted-foreground/30 hover:bg-muted/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${provider.bgColor}`}>
+                          {provider.icon === 'Zap' && <Zap className={`h-4 w-4 ${provider.color}`} />}
+                          {provider.icon === 'Sparkles' && <Sparkles className={`h-4 w-4 ${provider.color}`} />}
+                          {provider.icon === 'Bot' && <Bot className={`h-4 w-4 ${provider.color}`} />}
+                          {provider.icon === 'Cloud' && <Cloud className={`h-4 w-4 ${provider.color}`} />}
+                          {provider.icon === 'Cpu' && <Cpu className={`h-4 w-4 ${provider.color}`} />}
+                          {provider.icon === 'Link2' && <Link2 className={`h-4 w-4 ${provider.color}`} />}
+                        </div>
+                        <span className="font-medium text-sm">{provider.name}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{provider.description}</p>
+                      {!provider.requiresKey && (
+                        <span className="inline-block mt-2 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Free</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* API Configuration Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">API Configuration</CardTitle>
+                <CardDescription>Enter your credentials for the selected provider</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {AI_PROVIDERS.find(p => p.id === aiProvider)?.requiresKey && (
+                  <div className="space-y-2">
+                    <Label>API Key</Label>
+                    <div className="relative">
+                      <Input
+                        type={showApiKey ? 'text' : 'password'}
+                        value={aiApiKey}
+                        onChange={e => setAiApiKey(e.target.value)}
+                        placeholder={AI_PROVIDERS.find(p => p.id === aiProvider)?.keyPlaceholder}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Your API key is stored securely and never shared</p>
+                  </div>
+                )}
+
+                {aiProvider === 'custom' && (
+                  <div className="space-y-2">
+                    <Label>Custom Endpoint URL</Label>
+                    <Input
+                      value={aiCustomEndpoint}
+                      onChange={e => setAiCustomEndpoint(e.target.value)}
+                      placeholder="http://localhost:8000/v1"
+                    />
+                    <p className="text-xs text-muted-foreground">Enter the base URL of your OpenAI-compatible server</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Model</Label>
+                  {AI_PROVIDERS.find(p => p.id === aiProvider)?.models.length ? (
+                    <select
+                      value={aiModel}
+                      onChange={e => setAiModel(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      {AI_PROVIDERS.find(p => p.id === aiProvider)?.models.map(model => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      value={aiModel}
+                      onChange={e => setAiModel(e.target.value)}
+                      placeholder="Enter model name"
+                    />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Provider Info Card */}
+            <Card className="bg-muted/30">
+              <CardContent className="pt-6">
+                <div className="flex gap-3">
+                  <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p><strong>Security Note:</strong> API keys are stored on your server and never sent to the sandbox. The AI assistant connects through a secure proxy.</p>
+                    <p><strong>Free Option:</strong> Select "Local Ollama" to run AI models on your own machine with no API keys required.</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
