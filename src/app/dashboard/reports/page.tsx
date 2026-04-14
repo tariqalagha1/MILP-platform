@@ -21,6 +21,7 @@ import {
   Activity
 } from 'lucide-react';
 import { formatSAR, formatNumber } from '@/lib/roi-calculator';
+import { BranchSelector } from '@/components/branch-selector';
 import {
   BarChart,
   Bar,
@@ -79,6 +80,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('30');
   const [activeTab, setActiveTab] = useState('revenue');
+  const [selectedBranch, setSelectedBranch] = useState('all');
 
   useEffect(() => {
     fetchReports();
@@ -192,7 +194,8 @@ export default function ReportsPage() {
               Comprehensive insights into your clinic's performance
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <BranchSelector value={selectedBranch} onChange={setSelectedBranch} />
             <Select value={period} onValueChange={(value) => setPeriod(value || '30')}>
               <SelectTrigger className="w-[140px]">
                 <Calendar className="h-4 w-4 mr-2" />

@@ -31,10 +31,10 @@ export default function HomePage() {
             <span className="text-muted-foreground text-sm hidden sm:inline">Revenue Intelligence</span>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/dashboard/overview">
-              <Button variant="ghost" size="sm">Dashboard</Button>
+            <Link href="/sign-in">
+              <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
-            <Link href="/dashboard/roi-calculator">
+            <Link href="/sign-up">
               <Button size="sm">Get Started</Button>
             </Link>
           </div>

@@ -19,8 +19,9 @@ import {
   User,
   Database,
   Rocket,
+  HardDrive,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 
 interface NavItem {
@@ -68,6 +69,11 @@ const navigation: NavItem[] = [
     href: '/dashboard/settings',
     icon: Settings,
   },
+  {
+    title: 'Backup & Restore',
+    href: '/dashboard/backup',
+    icon: HardDrive,
+  },
 ];
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -75,6 +81,20 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role: string } | null>(null);
+
+  useEffect(() => {
+    // Load user from localStorage (set during sign-in)
+    try {
+      const stored = localStorage.getItem('milp_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        setCurrentUser({ name: u.name || u.email, email: u.email, role: u.role || 'admin' });
+      }
+    } catch {
+      // fallback to demo defaults
+    }
+  }, []);
 
   const handleSeedData = async () => {
     setSeeding(true);
@@ -185,8 +205,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   <User className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="text-sm font-medium">Demo User</p>
-                  <p className="text-xs text-muted-foreground">admin@clinic.sa</p>
+                  <p className="text-sm font-medium">{currentUser?.name || 'Demo User'}</p>
+                  <p className="text-xs text-muted-foreground">{currentUser?.email || 'admin@clinic.sa'}</p>
                 </div>
                 <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", showUserMenu && "rotate-180")} />
               </button>
@@ -203,6 +223,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   <Link
                     href="/"
                     className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded hover:bg-muted"
+                    onClick={() => {
+                      localStorage.removeItem('milp_token');
+                      localStorage.removeItem('milp_user');
+                    }}
                   >
                     <LogOut className="h-3.5 w-3.5" />
                     Sign Out

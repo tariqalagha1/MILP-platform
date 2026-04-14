@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/popover';
 import { formatSAR, formatNumber } from '@/lib/roi-calculator';
 import { toast } from 'sonner';
+import { BranchSelector } from '@/components/branch-selector';
 
 interface Claim {
   id: string;
@@ -140,6 +141,7 @@ export default function ClaimsIntelligencePage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState('all');
 
   // New claim form state
   const [newClaimNumber, setNewClaimNumber] = useState('');
@@ -218,7 +220,8 @@ export default function ClaimsIntelligencePage() {
             </h1>
             <p className="text-muted-foreground mt-1">Monitor claim rejections and recover lost revenue</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <BranchSelector value={selectedBranch} onChange={setSelectedBranch} />
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw className="h-4 w-4 mr-2" /> Refresh
             </Button>

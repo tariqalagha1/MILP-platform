@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { formatSAR, formatNumber } from '@/lib/roi-calculator';
 import Link from 'next/link';
+import { BranchSelector } from '@/components/branch-selector';
 
 interface DashboardData {
   summary: {
@@ -63,6 +64,7 @@ interface DashboardData {
 export default function ExecutiveDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedBranch, setSelectedBranch] = useState('all');
 
   useEffect(() => {
     fetchDashboardData();
@@ -103,10 +105,13 @@ export default function ExecutiveDashboardPage() {
               Real-time overview of your clinic's performance
             </p>
           </div>
-          <Button onClick={fetchDashboardData} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <BranchSelector value={selectedBranch} onChange={setSelectedBranch} />
+            <Button onClick={fetchDashboardData} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {loading ? (

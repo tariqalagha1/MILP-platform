@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { formatSAR, formatNumber } from '@/lib/roi-calculator';
 import { toast } from 'sonner';
+import { BranchSelector } from '@/components/branch-selector';
 
 interface Appointment {
   id: string;
@@ -65,6 +66,7 @@ export default function PatientFollowUpPage() {
   const [upcomingAppts, setUpcomingAppts] = useState<Appointment[]>([]);
   const [overduePatients, setOverduePatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+    const [selectedBranch, setSelectedBranch] = useState('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddForm, setShowAddForm] = useState(false);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
@@ -171,7 +173,8 @@ export default function PatientFollowUpPage() {
             </h1>
             <p className="text-muted-foreground mt-1">Reduce no-shows and improve patient retention</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <BranchSelector value={selectedBranch} onChange={setSelectedBranch} />
             <Button variant="outline" size="sm" onClick={fetchAll}>
               <RefreshCw className="h-4 w-4 mr-2" /> Refresh
             </Button>

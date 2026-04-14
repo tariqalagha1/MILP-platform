@@ -116,6 +116,7 @@ model Claim {
   
   claimNumber     String      // External claim reference
   patientId       String      // Patient identifier (anonymized)
+  insurer         String?     // Insurance provider name (e.g. Tawuniya, Bupa Arabia)
   amount          Float       // Claim amount in SAR
   status          ClaimStatus @default(SUBMITTED)
   
@@ -141,8 +142,13 @@ model Patient {
   id           String   @id @default(cuid())
   branchId     String
   
-  // Anonymized patient data
+  // Patient identity
   externalId   String   // Reference to PMS/EMR
+  name         String?  // Patient display name
+  phone        String?  // Contact phone (e.g. +966 5X XXX XXXX)
+  email        String?  // Contact email
+
+  // Visit tracking
   noShowCount  Int      @default(0)
   lastVisitAt  DateTime?
   nextDueAt    DateTime? // When they're due for follow-up
